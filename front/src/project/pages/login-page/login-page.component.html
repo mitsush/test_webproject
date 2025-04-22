@@ -1,0 +1,43 @@
+<div class="login">
+  <div class="form-container">
+    <h2>Вход</h2>
+    <form #loginForm="ngForm" (ngSubmit)="onSubmit(loginForm)">
+      <input
+        type="text"
+        name="username"
+        placeholder="Имя пользователя"
+        [(ngModel)]="username"
+        required
+        #usernameRef="ngModel"
+      />
+      <div
+        *ngIf="usernameRef.invalid && (usernameRef.touched || submitted)"
+        class="error"
+      >
+        Имя пользователя обязательно
+      </div>
+
+      <input
+        type="password"
+        name="password"
+        placeholder="Пароль"
+        [(ngModel)]="password"
+        required
+        #passwordRef="ngModel"
+      />
+      <div
+        *ngIf="passwordRef.invalid && (passwordRef.touched || submitted)"
+        class="error"
+      >
+        Пароль обязателен
+      </div>
+
+      <button type="submit">Войти</button>
+    </form>
+
+    <div class="divider">или</div>
+    <button (click)="goToRegistration()" class="secondary-button">
+      Нет аккаунта? Зарегистрироваться
+    </button>
+  </div>
+</div>

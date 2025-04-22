@@ -1,0 +1,81 @@
+<div class="settings-container">
+  <div class="navbar">
+    <div class="logo">Settings</div>
+    <button class="back-btn" routerLink="/chat">Back to Chat</button>
+  </div>
+
+  <div class="settings-content">
+    <div class="profile-section">
+      <h2>Profile Settings</h2>
+
+      <div class="avatar-section">
+        <label class="avatar-container">
+          <!-- Используем avatarPreview при выборе нового файла, иначе используем обработанный avatarUrl -->
+          <img
+            [src]="avatarPreview || avatarUrl"
+            alt="Profile picture"
+            class="avatar-image"
+            (error)="this.avatarUrl = 'assets/default-avatar.png'"
+          />
+          <div class="avatar-overlay">
+            <i class="fas fa-camera upload-label"></i>
+          </div>
+          <input
+            type="file"
+            (change)="onFileSelected($event)"
+            accept="image/*"
+            class="hidden"
+          />
+        </label>
+      </div>
+
+      <form
+        class="settings-form"
+        #settingsForm="ngForm"
+        (ngSubmit)="updateProfile()"
+      >
+        <div class="form-group">
+          <label>Username</label>
+          <input
+            type="text"
+            [(ngModel)]="user.username"
+            name="username"
+            class="form-input"
+          />
+        </div>
+
+        <div class="form-group">
+          <label>Email</label>
+          <input
+            type="email"
+            [(ngModel)]="user.email"
+            name="email"
+            class="form-input"
+          />
+        </div>
+
+        <div class="form-group">
+          <label>Bio</label>
+          <textarea
+            [(ngModel)]="user.bio"
+            name="bio"
+            class="form-input"
+            rows="4"
+          ></textarea>
+        </div>
+
+        <button type="submit" class="save-btn">Save Changes</button>
+      </form>
+    </div>
+
+    <div class="danger-zone">
+      <h2>Danger Zone</h2>
+      <div class="danger-zone-buttons">
+        <button class="delete-btn" (click)="deleteAccount()">
+          Delete account
+        </button>
+        <button class="logOut-btn" (click)="logOut()">Log Out</button>
+      </div>
+    </div>
+  </div>
+</div>

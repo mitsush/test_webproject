@@ -1,0 +1,108 @@
+.registration {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  padding: 20px;
+  background-color: #f4f4f4;
+}
+
+.form-container {
+  background-color: #fff;
+  padding: 30px 40px;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+}
+
+h2 {
+  margin-bottom: 20px;
+  font-size: 24px;
+  font-weight: bold;
+  color: #333;
+}
+
+input {
+  width: 100%;
+  padding: 12px;
+  margin: 10px 0;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 16px;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+input:focus {
+  border-color: #4a79f7;
+  outline: none;
+}
+
+button {
+  width: 100%;
+  padding: 12px;
+  background-color: #4a79f7;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  margin-top: 10px;
+  transition: background-color 0.2s;
+}
+
+button:hover {
+  background-color: #3b64d1;
+}
+
+.secondary-button {
+  background-color: #e0e0e0;
+  color: #333;
+}
+
+.divider {
+  margin: 15px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.error {
+  color: red;
+  font-size: 13px;
+  text-align: left;
+  margin: -6px 0 8px 0;
+}
+
+@media (max-width: 480px) {
+  .form-container {
+    padding: 20px;
+  }
+
+  h2 {
+    font-size: 20px;
+  }
+
+  input,
+  button {
+    font-size: 14px;
+    padding: 10px;
+  }
+}
+
+@media (min-width: 1440px) {
+  .form-container {
+    max-width: 500px;
+    padding: 40px 60px;
+  }
+
+  h2 {
+    font-size: 28px;
+  }
+
+  input,
+  button {
+    font-size: 18px;
+  }
+}
