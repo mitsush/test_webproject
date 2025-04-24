@@ -33,10 +33,14 @@
       >
         <div class="group-avatar">{{ getInitials(chat.name) }}</div>
         <div class="group-info">
-          <div class="group-name">{{ chat.name || 'New Chat' }}</div>
+          <div class="group-name">{{ chat.name || getChatNameFromParticipants(chat) }}</div>
           <div class="last-message">
             {{ chat.last_message?.text || 'No messages yet' }}
           </div>
+        </div>
+        <div class="status-indicator" 
+             *ngIf="!chat.is_group" 
+             [class.online]="isChatParticipantOnline(chat)">
         </div>
       </div>
       
@@ -48,8 +52,15 @@
   
   <div class="chat-container" [class.sidebar-active]="isSidebarOpen">
     <div *ngIf="selectedChat" class="chat-header">
-      <div class="chat-title">{{ selectedChat.name || 'New Chat' }}</div>
-      <div class="chat-participants">{{ selectedChat.participants.length }} participants</div>
+      <div class="chat-title">
+        {{ selectedChat.name || getChatNameFromParticipants(selectedChat) }}
+        <span class="online-status" *ngIf="!selectedChat.is_group && isChatParticipantOnline(selectedChat)">
+          online
+        </span>
+      </div>
+      <div class="chat-participants">
+        {{ selectedChat.is_group ? selectedChat.participants.length + ' participants' : '' }}
+      </div>
     </div>
     
     <div *ngIf="!selectedChat" class="no-chat-selected">

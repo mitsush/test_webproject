@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { catchError, map, Observable, of } from 'rxjs';
 import { User } from '../models/user.model';
 
 @Injectable({
@@ -8,6 +8,9 @@ import { User } from '../models/user.model';
 })
 export class UserService {
   private apiUrl = 'http://localhost:8000/api';
+  private defaultAvatarUrl = 'assets/default-avatar.png';
+  
+  private avatarCache = new Map<number, string>();
 
   constructor(private http: HttpClient) {}
 
@@ -48,16 +51,31 @@ export class UserService {
     });
   }
 
-  // Helper method to process avatar URLs
-  getAvatarUrl(avatarPath: string | undefined | null): string {
-    if (!avatarPath) {
-      return 'assets/default-avatar.png';
+  getAvatarUrl(userId: number): Observable<string> {
+    if (this.avatarCache.has(userId)) {
+      return of(this.avatarCache.get(userId) || this.defaultAvatarUrl);
     }
-    
-    if (avatarPath.startsWith('http')) {
-      return avatarPath;
+
+    return this.http.get<User>(`${this.apiUrl}/users/${userId}/`, {
+      headers: this.getHeaders()
+    }).pipe(
+      map(user => {
+        const avatarUrl = user.avatar_url || this.defaultAvatarUrl;
+        this.avatarCache.set(userId, avatarUrl);
+        return avatarUrl;
+      }),
+      catchError(() => {
+        this.avatarCache.set(userId, this.defaultAvatarUrl);
+        return of(this.defaultAvatarUrl);
+      })
+    );
+  }
+
+  clearAvatarCache(userId?: number): void {
+    if (userId) {
+      this.avatarCache.delete(userId);
+    } else {
+      this.avatarCache.clear();
     }
-    
-    return `http://localhost:8000${avatarPath}`;
   }
 }

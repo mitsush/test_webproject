@@ -4,6 +4,7 @@ export interface User {
   email: string;
   bio?: string;
   avatar?: string;
+  avatar_url?: string;
   is_online: boolean;
 }
 

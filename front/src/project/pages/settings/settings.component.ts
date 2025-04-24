@@ -86,34 +86,18 @@ export class SettingsComponent implements OnInit {
       return;
     }
 
-    // Проверяем различные варианты форматирования пути
-    if (this.user.avatar.startsWith('http')) {
-      this.avatarUrl = this.user.avatar;
-    } else if (this.user.avatar.startsWith('/media/')) {
+    // If avatar is a relative path, make it absolute
+    if (this.user.avatar.startsWith('/')) {
       this.avatarUrl = `${this.baseUrl}${this.user.avatar}`;
-    } else if (this.user.avatar.startsWith('/')) {
-      this.avatarUrl = `${this.baseUrl}/media${this.user.avatar}`;
+    } else if (this.user.avatar.startsWith('http')) {
+      // If it's already a full URL, use it as is
+      this.avatarUrl = this.user.avatar;
     } else {
+      // Otherwise, assume it's a relative path without a leading slash
       this.avatarUrl = `${this.baseUrl}/media/${this.user.avatar}`;
     }
     
     console.log('Processed avatar URL:', this.avatarUrl);
-    
-    // Проверяем, что URL доступен
-    this.checkImageExists(this.avatarUrl, (exists) => {
-      if (!exists) {
-        console.error('Avatar image does not exist at:', this.avatarUrl);
-        this.avatarUrl = 'assets/default-avatar.png';
-      }
-    });
-  }
-
-  // Функция для проверки существования изображения
-  checkImageExists(url: string, callback: (exists: boolean) => void): void {
-    const img = new Image();
-    img.onload = () => callback(true);
-    img.onerror = () => callback(false);
-    img.src = url;
   }
 
   onFileSelected(event: any): void {
@@ -143,9 +127,8 @@ export class SettingsComponent implements OnInit {
     formData.append('username', this.user.username);
     formData.append('email', this.user.email);
     formData.append('bio', this.user.bio || '');
-    formData.append('is_online', String(this.user.is_online));
-
-    // Если выбран новый файл аватарки, добавляем его в formData
+    
+    // Only add avatar if a new one is selected
     if (this.selectedAvatarFile) {
       formData.append('avatar', this.selectedAvatarFile);
     }
@@ -154,38 +137,64 @@ export class SettingsComponent implements OnInit {
     this.errorMessage = '';
     this.successMessage = '';
 
-    console.log('Sending data to the backend:', {
-      username: this.user.username,
-      email: this.user.email, 
-      bio: this.user.bio || '',
-      is_online: String(this.user.is_online),
-      avatar: this.selectedAvatarFile ? this.selectedAvatarFile.name : 'No new file'
-    });
+    // Use a dedicated endpoint for avatar upload if the user is just changing their avatar
+    if (this.selectedAvatarFile && !this.hasProfileDataChanged()) {
+      this.http
+        .post<any>(`${this.apiUrl}/users/${this.user.id}/upload_avatar/`, formData, {
+          headers: new HttpHeaders({
+            Authorization: `Bearer ${token}`,
+          }),
+        })
+        .subscribe({
+          next: (response) => {
+            console.log('Avatar updated successfully:', response);
+            this.successMessage = 'Avatar updated successfully';
+            this.isLoading = false;
+            
+            // Update avatar URL and clear selected file
+            if (response.avatar) {
+              this.user.avatar = response.avatar;
+              this.processAvatarUrl();
+            }
+            this.selectedAvatarFile = null;
+            this.avatarPreview = null;
+          },
+          error: (err) => {
+            console.error('Error updating avatar:', err);
+            this.errorMessage = 'Failed to update avatar';
+            this.isLoading = false;
+          },
+        });
+    } else {
+      // Update the entire profile
+      this.http
+        .patch<User>(`${this.apiUrl}/users/${this.user.id}/`, formData, {
+          headers,
+        })
+        .subscribe({
+          next: (updatedUser: User) => {
+            console.log('Profile updated successfully:', updatedUser);
+            this.successMessage = 'Profile updated successfully';
+            this.user = updatedUser;
+            this.processAvatarUrl();
+            this.selectedAvatarFile = null;
+            this.avatarPreview = null;
+            this.isLoading = false;
+          },
+          error: (err: any) => {
+            this.errorMessage = 'Failed to update profile';
+            console.error('Error updating profile:', err);
+            this.isLoading = false;
+          },
+        });
+    }
+  }
 
-    // Используем PATCH вместо PUT
-    this.http
-      .patch<User>(`${this.apiUrl}/users/${this.user.id}/`, formData, {
-        headers,
-      })
-      .subscribe({
-        next: (updatedUser: User) => {
-          console.log('Backend response:', updatedUser);
-          this.successMessage = 'Profile updated successfully';
-          this.user = updatedUser;
-          this.processAvatarUrl(); // Обновляем URL аватарки
-          this.selectedAvatarFile = null;
-          this.avatarPreview = null;
-          this.isLoading = false;
-          
-          // Принудительно перезагружаем профиль с небольшой задержкой
-          setTimeout(() => this.loadUserProfile(), 500);
-        },
-        error: (err: any) => {
-          this.errorMessage = 'Failed to update profile';
-          console.error('Error updating profile:', err);
-          this.isLoading = false;
-        },
-      });
+  // Helper method to check if non-avatar profile data has changed
+  private hasProfileDataChanged(): boolean {
+    // We'd need to compare with original data from server
+    // For simplicity, assuming any edit was made
+    return true;
   }
 
   deleteAccount(): void {

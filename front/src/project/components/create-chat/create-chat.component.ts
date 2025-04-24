@@ -2,6 +2,7 @@ import { Component, OnInit, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { UserSearchComponent } from './user-search.component';
 
 interface User {
   id: number;
@@ -15,7 +16,7 @@ interface User {
 @Component({
   selector: 'app-create-chat',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, UserSearchComponent],
   template: `
     <div class="modal-backdrop" (click)="close()"></div>
     <div class="modal-container" (click)="$event.stopPropagation()">
@@ -35,36 +36,16 @@ interface User {
           <input type="checkbox" [(ngModel)]="isGroupChat">
         </div>
         
-        <div class="search-group">
-          <input type="text" [(ngModel)]="searchTerm" (input)="filterUsers()" 
-                 placeholder="Search users..." class="form-input">
-        </div>
+        <app-user-search (userSelected)="onUserSelected($event)"></app-user-search>
         
-        <div class="users-list">
-          <div *ngFor="let user of filteredUsers" class="user-item">
-            <label class="user-checkbox">
-              <input type="checkbox" 
-                     [checked]="isSelected(user.id)"
-                     (change)="toggleUserSelection(user.id)">
-              <div class="user-info">
-                <div class="user-avatar">
-                  {{ user.username.substring(0, 2).toUpperCase() }}
-                </div>
-                <div class="user-details">
-                  <span class="username">{{ user.username }}</span>
-                  <span class="email">{{ user.email }}</span>
-                </div>
-                <div class="status-dot" [class.online]="user.is_online"></div>
-              </div>
-            </label>
-          </div>
-          
-          <div *ngIf="filteredUsers.length === 0 && !isLoading" class="no-users">
-            No users found
-          </div>
-          
-          <div *ngIf="isLoading" class="loading">
-            Loading users...
+        <div class="selected-users" *ngIf="selectedUsers.length > 0">
+          <h4>Selected Users ({{ selectedUsers.length }})</h4>
+          <div class="selected-user-list">
+            <div *ngFor="let user of selectedUsers" class="selected-user-item">
+              <div class="user-avatar">{{ getUserInitials(user.username) }}</div>
+              <div class="user-name">{{ user.username }}</div>
+              <button class="remove-user-btn" (click)="removeUser(user.id)">×</button>
+            </div>
           </div>
         </div>
       </div>
@@ -72,7 +53,7 @@ interface User {
       <div class="modal-footer">
         <button class="cancel-btn" (click)="close()">Cancel</button>
         <button class="create-btn" 
-                [disabled]="selectedUserIds.length === 0"
+                [disabled]="selectedUsers.length === 0"
                 (click)="createChat()">
           Create Chat
         </button>
@@ -159,82 +140,58 @@ interface User {
       font-size: 16px;
     }
     
-    .search-group {
-      margin-bottom: 15px;
+    .selected-users {
+      margin-top: 20px;
     }
     
-    .users-list {
-      margin-top: 15px;
-      max-height: 300px;
-      overflow-y: auto;
-    }
-    
-    .user-item {
+    .selected-users h4 {
       margin-bottom: 10px;
+      font-size: 16px;
+      color: #333;
     }
     
-    .user-checkbox {
+    .selected-user-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    
+    .selected-user-item {
       display: flex;
       align-items: center;
-      cursor: pointer;
-    }
-    
-    .user-checkbox input {
-      margin-right: 10px;
-    }
-    
-    .user-info {
-      display: flex;
-      align-items: center;
-      padding: 10px;
-      border: 1px solid #eee;
-      border-radius: 4px;
-      width: 100%;
+      background-color: #f0f7ff;
+      border-radius: 20px;
+      padding: 5px 10px;
     }
     
     .user-avatar {
-      width: 40px;
-      height: 40px;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
       background-color: #4a79f7;
       color: white;
-      border-radius: 50%;
       display: flex;
       justify-content: center;
       align-items: center;
-      margin-right: 10px;
-      font-weight: bold;
+      font-size: 12px;
+      margin-right: 5px;
     }
     
-    .user-details {
-      flex: 1;
-    }
-    
-    .username {
-      font-weight: 500;
-      display: block;
-    }
-    
-    .email {
+    .user-name {
       font-size: 14px;
-      color: #666;
+      margin-right: 5px;
     }
     
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background-color: #ccc;
-      margin-left: 10px;
+    .remove-user-btn {
+      background: none;
+      border: none;
+      color: #999;
+      font-size: 16px;
+      cursor: pointer;
     }
     
-    .status-dot.online {
-      background-color: #4caf50;
-    }
-    
-    .no-users, .loading {
-      text-align: center;
-      color: #666;
-      padding: 20px;
+    .remove-user-btn:hover {
+      color: #f44336;
     }
     
     .cancel-btn, .create-btn {
@@ -271,76 +228,81 @@ export class CreateChatComponent implements OnInit {
   
   @Output() cancelled = new EventEmitter<void>();
   
-  users: User[] = [];
-  filteredUsers: User[] = [];
-  selectedUserIds: number[] = [];
   chatName: string = '';
   isGroupChat: boolean = false;
-  searchTerm: string = '';
-  isLoading: boolean = false;
+  selectedUserIds: number[] = [];
+  selectedUsers: User[] = [];
   
   private apiUrl = 'http://localhost:8000/api';
   
   constructor(private http: HttpClient) {}
   
-  ngOnInit(): void {
-    this.loadUsers();
+  ngOnInit(): void {}
+  
+  onUserSelected(userIds: number[]): void {
+    this.selectedUserIds = userIds;
+    this.loadSelectedUsersDetails();
   }
   
-  loadUsers(): void {
-    this.isLoading = true;
+  loadSelectedUsersDetails(): void {
+    if (this.selectedUserIds.length === 0) {
+      this.selectedUsers = [];
+      return;
+    }
     
     const token = localStorage.getItem('access_token');
     const headers = new HttpHeaders({
       'Authorization': `Bearer ${token}`
     });
     
-    this.http.get<User[]>(`${this.apiUrl}/users/`, { headers })
-      .subscribe({
-        next: (users) => {
-          // Filter out the current user
-          const currentUserId = localStorage.getItem('user_id');
-          this.users = users.filter(user => user.id !== Number(currentUserId));
-          this.filteredUsers = [...this.users];
-          this.isLoading = false;
+    // Fetch details for each selected user
+    // In a real app, you might want to implement a more efficient endpoint 
+    // to get multiple users at once
+    const userRequests = this.selectedUserIds.map(id => 
+      this.http.get<User>(`${this.apiUrl}/users/${id}/`, { headers })
+    );
+    
+    // Handle each request separately to avoid failing if one user fetch fails
+    this.selectedUsers = [];
+    userRequests.forEach(request => {
+      request.subscribe({
+        next: (user) => {
+          if (!this.selectedUsers.some(u => u.id === user.id)) {
+            this.selectedUsers.push(user);
+          }
         },
         error: (error) => {
-          console.error('Error loading users', error);
-          this.isLoading = false;
+          console.error('Error fetching user details:', error);
         }
       });
+    });
   }
   
-  filterUsers(): void {
-    if (!this.searchTerm.trim()) {
-      this.filteredUsers = [...this.users];
-      return;
-    }
-    
-    const term = this.searchTerm.toLowerCase();
-    this.filteredUsers = this.users.filter(user => 
-      user.username.toLowerCase().includes(term) || 
-      user.email.toLowerCase().includes(term)
-    );
-  }
-  
-  toggleUserSelection(userId: number): void {
+  removeUser(userId: number): void {
     const index = this.selectedUserIds.indexOf(userId);
-    if (index === -1) {
-      this.selectedUserIds.push(userId);
-    } else {
+    if (index !== -1) {
       this.selectedUserIds.splice(index, 1);
+      this.selectedUsers = this.selectedUsers.filter(user => user.id !== userId);
     }
   }
   
-  isSelected(userId: number): boolean {
-    return this.selectedUserIds.includes(userId);
+  getUserInitials(username: string): string {
+    if (!username) return '';
+    return username.substring(0, 2).toUpperCase();
   }
   
   createChat(): void {
     if (this.selectedUserIds.length === 0) {
+      console.error('No users selected');
+      alert('Please select at least one user to chat with');
       return;
     }
+    
+    console.log('Creating chat with:', {
+      participants: this.selectedUserIds,
+      name: this.chatName,
+      isGroup: this.isGroupChat
+    });
     
     this.chatCreated.emit({
       participants: this.selectedUserIds,

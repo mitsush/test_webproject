@@ -42,10 +42,12 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.SerializerMethodField()
+    
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'bio', 'avatar', 'is_online']
-        read_only_fields = ['avatar_url']
+        fields = ['id', 'username', 'email', 'bio', 'avatar', 'avatar_url', 'is_online', 'last_active']
+        read_only_fields = ['avatar_url', 'last_active']
     
     def get_avatar_url(self, obj):
         if obj.avatar and hasattr(obj.avatar, 'url'):
@@ -56,20 +58,78 @@ class UserSerializer(serializers.ModelSerializer):
         return None
 
 
-
-class ChatSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Chat
-        fields = '__all__'
-
-
 class MessageSerializer(serializers.ModelSerializer):
+    sender_username = serializers.SerializerMethodField()
+    
     class Meta:
         model = Message
-        fields = '__all__'
+        fields = ['id', 'sender', 'chat', 'text', 'image', 'sent_at', 'is_read', 'sender_username']
+    
+    def get_sender_username(self, obj):
+        return obj.sender.username
+
+
+class LastMessageSerializer(serializers.ModelSerializer):
+    sender_username = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Message
+        fields = ['id', 'sender', 'text', 'sent_at', 'is_read', 'sender_username']
+    
+    def get_sender_username(self, obj):
+        return obj.sender.username
+
+
+class ChatParticipantSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'avatar_url', 'is_online']
+    
+    def get_avatar_url(self, obj):
+        if obj.avatar and hasattr(obj.avatar, 'url'):
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.avatar.url)
+            return obj.avatar.url
+        return None
+
+
+class ChatSerializer(serializers.ModelSerializer):
+    last_message = serializers.SerializerMethodField()
+    participants_details = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Chat
+        fields = ['id', 'name', 'participants', 'participants_details', 'is_group', 'created_at', 'last_message']
+    
+    def get_last_message(self, obj):
+        last_message = obj.messages.order_by('-sent_at').first()
+        if last_message:
+            return LastMessageSerializer(last_message).data
+        return None
+    
+    def get_participants_details(self, obj):
+        participants = obj.participants.all()
+        return ChatParticipantSerializer(participants, many=True, context=self.context).data
 
 
 class ImageSerializer(serializers.ModelSerializer):
+    uploader_username = serializers.SerializerMethodField()
+    image_url = serializers.SerializerMethodField()
+    
     class Meta:
         model = Image
-        fields = '__all__'
+        fields = ['id', 'uploader', 'uploader_username', 'image', 'image_url', 'caption', 'uploaded_at']
+    
+    def get_uploader_username(self, obj):
+        return obj.uploader.username
+    
+    def get_image_url(self, obj):
+        if obj.image and hasattr(obj.image, 'url'):
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return obj.image.url
+        return None
