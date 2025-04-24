@@ -12,7 +12,16 @@ export class UserService {
   
   private avatarCache = new Map<number, string>();
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) {
+    // Listen for avatar cache invalidation events
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', (event) => {
+        if (event.key === 'avatar_cache_invalidated') {
+          this.clearAvatarCache();
+        }
+      });
+    }
+  }
 
   getHeaders(): HttpHeaders {
     const token = localStorage.getItem('access_token');
@@ -52,6 +61,15 @@ export class UserService {
   }
 
   getAvatarUrl(userId: number): Observable<string> {
+    // Check for cache invalidation flag
+    const cacheInvalidated = localStorage.getItem('avatar_cache_invalidated');
+    const isCurrent = userId === Number(localStorage.getItem('user_id'));
+    
+    // Always refresh current user's avatar if we've updated it
+    if (cacheInvalidated && isCurrent) {
+      this.avatarCache.delete(userId);
+    }
+    
     if (this.avatarCache.has(userId)) {
       return of(this.avatarCache.get(userId) || this.defaultAvatarUrl);
     }
@@ -60,7 +78,24 @@ export class UserService {
       headers: this.getHeaders()
     }).pipe(
       map(user => {
-        const avatarUrl = user.avatar_url || this.defaultAvatarUrl;
+        let avatarUrl = this.defaultAvatarUrl;
+        
+        // First try to use avatar_url which is pre-processed by backend
+        if (user.avatar_url) {
+          avatarUrl = user.avatar_url;
+        } 
+        // If not available, but avatar path exists, construct the URL
+        else if (user.avatar) {
+          // Process avatar path to full URL
+          if (user.avatar.startsWith('/')) {
+            avatarUrl = `http://localhost:8000${user.avatar}`;
+          } else if (user.avatar.startsWith('http')) {
+            avatarUrl = user.avatar;
+          } else {
+            avatarUrl = `http://localhost:8000/media/${user.avatar}`;
+          }
+        }
+        
         this.avatarCache.set(userId, avatarUrl);
         return avatarUrl;
       }),

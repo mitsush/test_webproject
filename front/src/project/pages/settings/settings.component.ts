@@ -80,6 +80,14 @@ export class SettingsComponent implements OnInit {
   }
 
   processAvatarUrl(): void {
+    // First check for avatar_url which is the processed URL from the backend
+    if (this.user.avatar_url) {
+      this.avatarUrl = this.user.avatar_url;
+      console.log('Using avatar_url:', this.avatarUrl);
+      return;
+    }
+    
+    // If no avatar_url, fall back to avatar path processing
     if (!this.user.avatar) {
       this.avatarUrl = 'assets/default-avatar.png';
       console.log('No avatar, using default:', this.avatarUrl);
@@ -153,11 +161,16 @@ export class SettingsComponent implements OnInit {
             
             // Update avatar URL and clear selected file
             if (response.avatar) {
+              this.avatarUrl = response.avatar;
+              // Store it in the user object too
               this.user.avatar = response.avatar;
-              this.processAvatarUrl();
+              this.user.avatar_url = response.avatar;
             }
             this.selectedAvatarFile = null;
             this.avatarPreview = null;
+            
+            // Clear avatar cache in UserService to force refresh in chat
+            this.clearAvatarCacheInStorage();
           },
           error: (err) => {
             console.error('Error updating avatar:', err);
@@ -175,11 +188,20 @@ export class SettingsComponent implements OnInit {
           next: (updatedUser: User) => {
             console.log('Profile updated successfully:', updatedUser);
             this.successMessage = 'Profile updated successfully';
+            
+            // Important: Preserve existing avatar URL if none returned in response
+            if (!updatedUser.avatar_url && this.avatarUrl && this.avatarUrl !== 'assets/default-avatar.png') {
+              updatedUser.avatar_url = this.avatarUrl;
+            }
+            
             this.user = updatedUser;
             this.processAvatarUrl();
             this.selectedAvatarFile = null;
             this.avatarPreview = null;
             this.isLoading = false;
+            
+            // Clear avatar cache in UserService to force refresh in chat
+            this.clearAvatarCacheInStorage();
           },
           error: (err: any) => {
             this.errorMessage = 'Failed to update profile';
@@ -195,6 +217,15 @@ export class SettingsComponent implements OnInit {
     // We'd need to compare with original data from server
     // For simplicity, assuming any edit was made
     return true;
+  }
+  
+  // Helper to clear avatar cache
+  private clearAvatarCacheInStorage(): void {
+    // Add this to force other components to reload the avatar
+    const userId = localStorage.getItem('user_id');
+    if (userId) {
+      localStorage.setItem('avatar_cache_invalidated', Date.now().toString());
+    }
   }
 
   deleteAccount(): void {

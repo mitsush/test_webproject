@@ -28,6 +28,7 @@ interface Chat {
   is_group: boolean;
   created_at: string;
   last_message?: ChatMessage;
+  participants_details?: any[]; // Will contain avatar_url and other data
 }
 
 @Component({
@@ -53,6 +54,8 @@ export class ChatComponent implements OnInit, OnDestroy {
   
   // Cache user details
   userDetailsCache: Map<number, User> = new Map();
+  // Cache avatar URLs
+  avatarUrlCache: Map<number, string> = new Map();
   
   private apiUrl = 'http://localhost:8000/api';
   private socketUrl = 'http://localhost:5000';
@@ -66,6 +69,31 @@ export class ChatComponent implements OnInit, OnDestroy {
     private userService: UserService
   ) {}
   
+  // Add this method to get the ID of the other participant in a chat
+getOtherParticipantId(chat: Chat): number {
+  const currentUserId = Number(localStorage.getItem('user_id'));
+  return chat.participants.find(id => id !== currentUserId) || 0;
+}
+
+// Add this method to load messages for a chat
+loadMessages(chatId: number): void {
+  const token = localStorage.getItem('access_token');
+  const headers = new HttpHeaders({
+    'Authorization': `Bearer ${token}`
+  });
+
+  this.http.get<ChatMessage[]>(`${this.apiUrl}/messages/?chat=${chatId}`, { headers })
+    .subscribe({
+      next: (messages) => {
+        this.messages = messages;
+        console.log('Messages loaded:', messages);
+      },
+      error: (error) => {
+        console.error('Error loading messages:', error);
+      }
+    });
+}
+
   getParticipantAvatar(chat: Chat): string {
     if (!chat || chat.participants.length === 0) {
       return 'assets/default-avatar.png';
@@ -86,6 +114,8 @@ export class ChatComponent implements OnInit, OnDestroy {
           this.userDetailsCache.set(otherParticipantId, user);
         }
       }
+      // Store in the avatar cache
+      this.avatarUrlCache.set(otherParticipantId, url);
     });
     
     return 'assets/default-avatar.png';
@@ -199,6 +229,11 @@ export class ChatComponent implements OnInit, OnDestroy {
           
           // Add current user to cache
           this.userDetailsCache.set(user.id, user);
+          
+          // Cache avatar URL
+          if (user.avatar_url) {
+            this.avatarUrlCache.set(user.id, user.avatar_url);
+          }
         },
         error: (error) => {
           console.error('Error loading user data:', error);
@@ -218,6 +253,17 @@ export class ChatComponent implements OnInit, OnDestroy {
           this.chats = chats;
           console.log('Chats loaded:', chats);
           
+          // Process participants details if available
+          chats.forEach(chat => {
+            if (chat.participants_details) {
+              chat.participants_details.forEach(participant => {
+                if (participant.id && participant.avatar_url) {
+                  this.avatarUrlCache.set(participant.id, participant.avatar_url);
+                }
+              });
+            }
+          });
+          
           // Load user details for all chat participants
           const userIds = new Set<number>();
           chats.forEach(chat => {
@@ -226,73 +272,101 @@ export class ChatComponent implements OnInit, OnDestroy {
           
           // Request online status of all participants
           this.requestOnlineStatus(Array.from(userIds));
+          
+          // Preload avatars for all participants
+          this.preloadParticipantAvatars(Array.from(userIds));
         },
         error: (error) => {
           console.error('Error loading chats:', error);
         }
       });
   }
-
-  requestOnlineStatus(userIds: number[]): void {
-    if (!userIds.length || !this.isSocketConnected) return;
-    
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      this.webSocketService.getOnlineStatus(token, userIds);
-    }
-  }
-
-  selectChat(chat: Chat): void {
-    this.selectedChat = chat;
-    this.loadMessages(chat.id);
-    
-    // Load user details for participants if not already cached
-    this.loadChatParticipantsDetails(chat);
-  }
-
-  loadChatParticipantsDetails(chat: Chat): void {
-    const token = localStorage.getItem('access_token');
-    const headers = new HttpHeaders({
-      'Authorization': `Bearer ${token}`
-    });
-    
-    // Find participants that aren't cached yet
-    const uncachedUserIds = chat.participants.filter(
-      userId => !this.userDetailsCache.has(userId)
-    );
-    
-    // Load each uncached user's details
-    uncachedUserIds.forEach(userId => {
-      this.http.get<User>(`${this.apiUrl}/users/${userId}/`, { headers })
-        .subscribe({
-          next: (user) => {
-            this.userDetailsCache.set(userId, user);
-          },
-          error: (error) => {
-            console.error(`Error loading user ${userId} details:`, error);
-          }
+  
+  // New method to preload all participant avatars
+  preloadParticipantAvatars(userIds: number[]): void {
+    userIds.forEach(userId => {
+      if (!this.avatarUrlCache.has(userId)) {
+        this.userService.getAvatarUrl(userId).subscribe(url => {
+          this.avatarUrlCache.set(userId, url);
         });
+      }
     });
   }
 
-  loadMessages(chatId: number): void {
-    const token = localStorage.getItem('access_token');
-    const headers = new HttpHeaders({
-      'Authorization': `Bearer ${token}`
-    });
+  // Add all these methods to your ChatComponent class
 
-    this.http.get<ChatMessage[]>(`${this.apiUrl}/messages/?chat=${chatId}`, { headers })
-      .subscribe({
-        next: (messages) => {
-          this.messages = messages;
-          console.log('Messages loaded:', messages);
-        },
-        error: (error) => {
-          console.error('Error loading messages:', error);
+  // Navigation methods
+  toggleSidebar(): void {
+    this.isSidebarOpen = !this.isSidebarOpen;
+  }
+
+  createNewChat(): void {
+    this.showCreateChatModal = true;
+  }
+
+  hideCreateChatModal(): void {
+    this.showCreateChatModal = false;
+  }
+
+  // Chat display methods
+  filteredChats(): Chat[] {
+    if (!this.searchChat.trim()) {
+      return this.chats;
+    }
+    
+    const searchTerm = this.searchChat.toLowerCase();
+    return this.chats.filter(chat => {
+      // Search by name if available
+      if (chat.name && chat.name.toLowerCase().includes(searchTerm)) {
+        return true;
+      }
+      
+      // If no name, search by participant usernames
+      for (const userId of chat.participants) {
+        const user = this.userDetailsCache.get(userId);
+        if (user && user.username.toLowerCase().includes(searchTerm)) {
+          return true;
         }
-      });
+      }
+      
+      // Search by last message text
+      if (chat.last_message && chat.last_message.text.toLowerCase().includes(searchTerm)) {
+        return true;
+      }
+      
+      return false;
+    });
   }
 
+  // Chat avatar and user methods
+  getInitials(name: string): string {
+    if (!name) return 'CH';
+    
+    const words = name.split(' ');
+    if (words.length === 1) {
+      return name.substring(0, 2).toUpperCase();
+    }
+    return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
+  }
+
+  isChatParticipantOnline(chat: Chat): boolean {
+    if (!chat || chat.is_group) return false;
+    
+    const otherParticipantId = this.getOtherParticipantId(chat);
+    return this.onlineUserIds.has(otherParticipantId);
+  }
+
+  isCurrentUserMessage(senderId: number): boolean {
+    const userId = localStorage.getItem('user_id');
+    return userId ? parseInt(userId) === senderId : false;
+  }
+
+  formatTime(dateString: string): string {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // Message methods
   sendMessage(): void {
     if (!this.newMessage.trim() || !this.selectedChat) {
       return;
@@ -330,10 +404,58 @@ export class ChatComponent implements OnInit, OnDestroy {
     }
   }
 
-  createNewChat(): void {
-    this.showCreateChatModal = true;
+  // Add these methods to your ChatComponent class
+
+  getChatNameFromParticipants(chat: Chat): string {
+    if (chat.name) return chat.name;
+    if (chat.is_group) return 'Group Chat';
+    
+    const otherParticipantId = this.getOtherParticipantId(chat);
+    const otherUser = this.userDetailsCache.get(otherParticipantId);
+    
+    if (otherUser) {
+      return otherUser.username;
+    }
+    
+    return 'Chat';
+  }
+
+  getChatAvatar(chat: Chat): string | null {
+    if (!chat) return null;
+    
+    if (chat.is_group) {
+      return null;
+    } else {
+      const otherParticipantId = this.getOtherParticipantId(chat);
+      
+      if (this.avatarUrlCache.has(otherParticipantId)) {
+        const url = this.avatarUrlCache.get(otherParticipantId);
+        // If it's a server URL, you could potentially add size parameters
+        return url || null;
+      }
+      
+      this.userService.getAvatarUrl(otherParticipantId).subscribe(url => {
+        if (url && url !== 'assets/default-avatar.png') {
+          this.avatarUrlCache.set(otherParticipantId, url);
+        }
+      });
+      
+      return null;
+    }
   }
   
+  // Handle avatar loading errors
+  onAvatarError(event: any, chat: Chat): void {
+    event.target.style.display = 'none';
+    
+    // If avatar fails to load, remove from cache
+    if (!chat.is_group) {
+      const otherParticipantId = this.getOtherParticipantId(chat);
+      this.avatarUrlCache.delete(otherParticipantId);
+    }
+  }
+
+  // Chat creation handling
   onChatCreated(chatData: { participants: number[], name: string, isGroup: boolean }): void {
     console.log('Chat creation data received:', chatData);
     this.showCreateChatModal = false;
@@ -342,13 +464,13 @@ export class ChatComponent implements OnInit, OnDestroy {
       console.error('No participants selected for the chat');
       return;
     }
-  
+
     // Try HTTP method first for reliability
     const token = localStorage.getItem('access_token');
     const headers = new HttpHeaders({
       'Authorization': `Bearer ${token}`
     });
-  
+
     const chatPayload = {
       participants: chatData.participants,
       name: chatData.name || '',
@@ -376,98 +498,57 @@ export class ChatComponent implements OnInit, OnDestroy {
         }
       });
   }
-  
-  hideCreateChatModal(): void {
-    this.showCreateChatModal = false;
-  }
 
-  toggleSidebar(): void {
-    this.isSidebarOpen = !this.isSidebarOpen;
-  }
-
-  filteredChats(): Chat[] {
-    if (!this.searchChat.trim()) {
-      return this.chats;
-    }
+  loadChatParticipantsDetails(chat: Chat): void {
+    const token = localStorage.getItem('access_token');
+    const headers = new HttpHeaders({
+      'Authorization': `Bearer ${token}`
+    });
     
-    const searchTerm = this.searchChat.toLowerCase();
-    return this.chats.filter(chat => {
-      // Search by name if available
-      if (chat.name && chat.name.toLowerCase().includes(searchTerm)) {
-        return true;
-      }
-      
-      // If no name, search by participant usernames
-      for (const userId of chat.participants) {
-        const user = this.userDetailsCache.get(userId);
-        if (user && user.username.toLowerCase().includes(searchTerm)) {
-          return true;
-        }
-      }
-      
-      // Search by last message text
-      if (chat.last_message && chat.last_message.text.toLowerCase().includes(searchTerm)) {
-        return true;
-      }
-      
-      return false;
+    // Find participants that aren't cached yet
+    const uncachedUserIds = chat.participants.filter(
+      userId => !this.userDetailsCache.has(userId)
+    );
+    
+    // Load each uncached user's details
+    uncachedUserIds.forEach(userId => {
+      this.http.get<User>(`${this.apiUrl}/users/${userId}/`, { headers })
+        .subscribe({
+          next: (user) => {
+            this.userDetailsCache.set(userId, user);
+            
+            // If user has an avatar_url, cache it
+            if (user.avatar_url) {
+              this.avatarUrlCache.set(userId, user.avatar_url);
+            } 
+            // Otherwise fetch it using the service
+            else if (user.avatar) {
+              this.userService.getAvatarUrl(userId).subscribe(url => {
+                this.avatarUrlCache.set(userId, url);
+              });
+            }
+          },
+          error: (error) => {
+            console.error(`Error loading user ${userId} details:`, error);
+          }
+        });
     });
   }
-  
-  getInitials(name: string): string {
-    if (name) {
-      const words = name.split(' ');
-      if (words.length === 1) {
-        return name.substring(0, 2).toUpperCase();
-      }
-      return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
+
+  requestOnlineStatus(userIds: number[]): void {
+    if (!userIds.length || !this.isSocketConnected) return;
+    
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      this.webSocketService.getOnlineStatus(token, userIds);
     }
-    
-    // If no name, try to get from other participant
-    if (this.selectedChat && !this.selectedChat.is_group) {
-      const otherParticipantId = this.getOtherParticipantId(this.selectedChat);
-      const otherUser = this.userDetailsCache.get(otherParticipantId);
-      if (otherUser) {
-        return otherUser.username.substring(0, 2).toUpperCase();
-      }
-    }
-    
-    return 'ЧТ'; // Default
   }
-  
-  formatTime(dateString: string): string {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
-  
-  isCurrentUserMessage(senderId: number): boolean {
-    const userId = localStorage.getItem('user_id');
-    return userId ? parseInt(userId) === senderId : false;
-  }
-  
-  isChatParticipantOnline(chat: Chat): boolean {
-    if (chat.is_group) return false;
+
+  selectChat(chat: Chat): void {
+    this.selectedChat = chat;
+    this.loadMessages(chat.id);
     
-    const otherParticipantId = this.getOtherParticipantId(chat);
-    return this.onlineUserIds.has(otherParticipantId);
-  }
-  
-  getOtherParticipantId(chat: Chat): number {
-    const currentUserId = Number(localStorage.getItem('user_id'));
-    return chat.participants.find(id => id !== currentUserId) || 0;
-  }
-  
-  getChatNameFromParticipants(chat: Chat): string {
-    if (chat.name) return chat.name;
-    if (chat.is_group) return 'Group Chat';
-    
-    const otherParticipantId = this.getOtherParticipantId(chat);
-    const otherUser = this.userDetailsCache.get(otherParticipantId);
-    
-    if (otherUser) {
-      return otherUser.username;
-    }
-    
-    return 'Chat';
+    // Load user details for participants if not already cached
+    this.loadChatParticipantsDetails(chat);
   }
 }

@@ -31,7 +31,15 @@
         [class.active]="selectedChat?.id === chat.id"
         (click)="selectChat(chat)"
       >
-        <div class="group-avatar">{{ getInitials(chat.name) }}</div>
+        <!-- Updated avatar display -->
+        <div *ngIf="getChatAvatar(chat) as avatarUrl; else defaultAvatar" class="group-avatar-img">
+          <img [src]="avatarUrl" (error)="onAvatarError($event, chat)" alt="Avatar" 
+               style="width: 40px; height: 40px; object-fit: cover; border-radius: 50%;">
+        </div>
+        <ng-template #defaultAvatar>
+          <div class="group-avatar">{{ getInitials(getChatNameFromParticipants(chat)) }}</div>
+        </ng-template>
+        
         <div class="group-info">
           <div class="group-name">{{ chat.name || getChatNameFromParticipants(chat) }}</div>
           <div class="last-message">
@@ -53,6 +61,15 @@
   <div class="chat-container" [class.sidebar-active]="isSidebarOpen">
     <div *ngIf="selectedChat" class="chat-header">
       <div class="chat-title">
+        <!-- Updated avatar in chat header -->
+        <div *ngIf="getChatAvatar(selectedChat) as avatarUrl; else headerDefaultAvatar" class="header-avatar-img">
+          <img [src]="avatarUrl" (error)="onAvatarError($event, selectedChat)" alt="Avatar"
+               style="width: 35px; height: 35px; object-fit: cover; border-radius: 50%;">
+        </div>
+        <ng-template #headerDefaultAvatar>
+          <div class="header-avatar">{{ getInitials(getChatNameFromParticipants(selectedChat)) }}</div>
+        </ng-template>
+        
         {{ selectedChat.name || getChatNameFromParticipants(selectedChat) }}
         <span class="online-status" *ngIf="!selectedChat.is_group && isChatParticipantOnline(selectedChat)">
           online
